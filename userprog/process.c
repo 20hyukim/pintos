@@ -744,16 +744,31 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 }
 
 /* Create a PAGE of stack at the USER_STACK. Return true on success. */
-static bool setup_stack(struct intr_frame *if_) {
-    bool success = false;
-    void *stack_bottom = (void *)(((uint8_t *)USER_STACK) - PGSIZE);
+/* 스택의 경우엔 lazy loading이 아니라, 바로 할당 되어야 한다.
+ * arg1, arg2 를 stack에 넣고 (PM)
+ * spt에 해당 VM를 추가하고 
+ * 성공적으로 추가되었다면, sucess = true; 
+ * 그게 아니라면, false를 반환.*/
+static bool
+setup_stack (struct intr_frame *if_) {
+	bool success = false;
+	void *stack_bottom = (void *) (((uint8_t *) USER_STACK) - PGSIZE);
 
-    /* TODO: Map the stack on stack_bottom and claim the page immediately.
-     * TODO: If success, set the rsp accordingly.
-     * TODO: You should mark the page is stack. */
-    /* TODO: Your code goes here */
+	/* TODO: Map the stack on stack_bottom and claim the page immediately.
+	 * TODO: If success, set the rsp accordingly.
+	 * TODO: You should mark the page is stack. */
+	/* TODO: Your code goes here */
 
-    return success;
+    if (vm_alloc_page(VM_ANON | VM_MARKER_0, stack_bottom, 1)) { //가상 주소 공간에 페이지를 생성하고 SPT에 등록
+        success = vm_claim_page(stack_bottom); // spt에서 페이지를 찾아 물리 메모리와 연결.
+
+        if (success) {
+            if_->rsp = USER_STACK; //다시 stack pointer를 최상단으로 설정하여, 프로세스가 스택을 올바르게 사용할 수 있도록.
+            thread_current()->stack_bottom = stack_bottom;
+        }
+    }
+
+	return success;
 }
 #endif /* VM */
 

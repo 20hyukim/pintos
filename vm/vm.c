@@ -1,6 +1,8 @@
 /* vm.c: Generic interface for virtual memory objects. */
 
 #include "threads/malloc.h"
+#include "threads/vaddr.h"
+
 #include "vm/vm.h"
 #include "vm/inspect.h"
 #include "userprog/process.h"
