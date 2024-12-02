@@ -140,8 +140,17 @@ static struct frame *
 vm_get_victim (void) {
 	struct frame *victim = NULL;
 	 /* TODO: The policy for eviction is up to you. */
+	struct thread *curr = thread_current();
 
-	return victim;
+	struct list_elem *e = list_begin(&frame_table);
+	for (e; e != list_end(&frame_table); e = list_next(e)) {
+		victim = list_entry(e, struct frame, frame_elem);
+		if (pml4_is_accessed(curr->pml4, victim->page->va))
+			pml4_set_accessed(curr->pml4, victim->page->va, false);
+		else
+			return victim;
+	}
+	return list_entry(list_begin(&frame_table), struct frame, frame_elem);
 }
 
 /* Evict one page and return the corresponding frame.
