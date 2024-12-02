@@ -8,6 +8,7 @@
 #include "userprog/process.h"
 #include "vm/inspect.h"
 #include "threads/mmu.h"
+#include "lib/kernel/hash.h"
 
 static struct list frame_table;
 
@@ -365,4 +366,7 @@ void
 supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
+	/* pseudo:
+	 * thread에서 사용 중이라고 mark되어 있는 spt element를 찾고 이에 대해서, free를 해줌. */
+	hash_clear(&spt->spt_hash, hash_destructor); // hash_clear 함수 호출
 }

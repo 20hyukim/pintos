@@ -48,6 +48,11 @@ hash_init (struct hash *h,
    functions hash_clear(), hash_destroy(), hash_insert(),
    hash_replace(), or hash_delete(), yields undefined behavior,
    whether done in DESTRUCTOR or elsewhere. */
+/* hash의 모든 요소 제거 spt->spt_hash를 전달했다면 이를 모두 제거.
+ * DESTRUCTOR가 null이면, H에 있는 각 요소에 대해서 DESTRUCTOR가 호출
+ * hash_clear가 호출되는 동안, hash_clear, hash_destory(), hash_insert()가 호출되면 문제를 일으킬 수 있음
+ * (destructor가 NULL) -> hash_table의 모든 요소는 제거하지만 요소의 메모리는 free하지 않음.
+ * (!destructor가 NULL) -> 메모리 해제*/
 void
 hash_clear (struct hash *h, hash_action_func *destructor) {
 	size_t i;
@@ -55,7 +60,7 @@ hash_clear (struct hash *h, hash_action_func *destructor) {
 	for (i = 0; i < h->bucket_cnt; i++) {
 		struct list *bucket = &h->buckets[i];
 
-		if (destructor != NULL)
+		if (destructor != NULL) // hash_table을 순환하면서, 각각의 elem에 대해 destructor 함수 호출.
 			while (!list_empty (bucket)) {
 				struct list_elem *list_elem = list_pop_front (bucket);
 				struct hash_elem *hash_elem = list_elem_to_hash_elem (list_elem);
@@ -404,4 +409,10 @@ bool less_func(const struct hash_elem *a, const struct hash_elem *b, void *aux) 
     const struct page *pb = hash_entry(b, struct page, hash_elem);
 
     return pa->va < pb->va;
+}
+
+void hash_destructor(struct hash_elem *e, void *aux) {
+    const struct page *p = hash_entry(e, struct page, hash_elem); // hash_elem을 포함하고 있는 페이지를 반환해주는 함수.
+    destory(p);
+    free(p);
 }
