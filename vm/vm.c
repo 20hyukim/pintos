@@ -148,10 +148,14 @@ vm_get_victim (void) {
  * Return NULL on error.*/
 static struct frame *
 vm_evict_frame (void) {
-	struct frame *victim UNUSED = vm_get_victim ();
+	struct frame *victim UNUSED = vm_get_victim (); // 제거할 프레임을 선택하는 함수 vm_get_victim ^
 	/* TODO: swap out the victim and return the evicted frame. */
+	/* Pseudo code: 선언했던 frame_table에서, 제일 앞에 있는 frame 주소를 반환? */
+	
+	if (victim->page) // 해당 프레임에 페이지가 연결되어 있다면 swap_out을 시킨다. - 디스크의 swap 영역으로 보내는 함수.
+		swap_out(victim->page);
 
-	return NULL;
+	return victim;
 }
 
 /* palloc() and get frame. If there is no available page, evict the page
