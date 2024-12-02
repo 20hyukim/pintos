@@ -413,6 +413,6 @@ bool less_func(const struct hash_elem *a, const struct hash_elem *b, void *aux) 
 
 void hash_destructor(struct hash_elem *e, void *aux) {
     const struct page *p = hash_entry(e, struct page, hash_elem); // hash_elem을 포함하고 있는 페이지를 반환해주는 함수.
-    destory(p);
+    destroy(p);
     free(p);
 }
