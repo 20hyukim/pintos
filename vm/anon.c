@@ -22,12 +22,13 @@ struct bitmap *swap_table;
 size_t slot_max;
 
 /* Initialize the data for anonymous pages */
-/* HDD과 연관되지 않는 anon type에 대해, iniit을 */
+/* HDD과 연관되지 않는 anon type에 대해, init을 */
 void vm_anon_init(void) {
     /* TODO: Set up the swap_disk. */
-    swap_disk = disk_get(1, 1);
-    slot_max = disk_size(swap_disk) / SLOT_SIZE;
-    swap_table = bitmap_create(slot_max);
+    swap_disk = disk_get(1, 1); // 1:1 (스왑공간)에 해당하는 디스크를 반환. ; 즉, 스왑 디스크 반환
+    slot_max = disk_size(swap_disk) / SLOT_SIZE; // 디스크 크기와 슬롯 크기를 이용해 사용할 수 있는 스왑 슬롯의 최대 개수를 계산
+    swap_table = bitmap_create(slot_max); // 스왑 슬롯 사용여부를 확인하기 위해 비트를 이용. 따라서, slot_max의 크기에 해당하는 bit string 생성 
+	                                      // ex) 01000001 이면 1 사용중 / 0 사용 가능
 }
 /* Initialize the file mapping */
 bool
