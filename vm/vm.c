@@ -344,10 +344,7 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 			case VM_ANON:
 				if(!vm_alloc_page(type, upage, writable))
 					goto err;
-			
-				if (!vm_copy_claim_page(dst, upage, src_page->frame->kva, writable))
-					goto err;
-				
+		
 				break;
 			
 			default:
