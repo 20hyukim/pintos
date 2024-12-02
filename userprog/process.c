@@ -656,10 +656,37 @@ static bool install_page(void *upage, void *kpage, bool writable) {
  * If you want to implement the function for only project 2, implement it on the
  * upper block. */
 
-static bool lazy_load_segment(struct page *page, void *aux) {
-    /* TODO: Load the segment from the file */
-    /* TODO: This called when the first page fault occurs on address VA. */
-    /* TODO: VA is available when calling this function. */
+static bool 
+lazy_load_segment (struct page *page, void *aux) {
+	/* TODO: Load the segment from the file */
+	/* TODO: This called when the first page fault occurs on address VA. */
+	/* TODO: VA is available when calling this function. */
+
+    /* <pseudo>
+     * aux - file pointer, offset, read size 등을 가져오기.
+     * 파일에서 데이터를 읽어서 페이지에 복사.
+     * 남은 공간은 0 으로 채우기.
+     * UNINIT PAGE 상태에 필요했던, aux 해제
+     * 
+     * page ->  va 에서, UNINIT 페이지를 찾기
+     * 실제 file에 접근해서 데이터를 가지고 와서 RAM에 할당하고, page와 연관짓기
+     */
+
+    struct aux *aux_p = aux;
+    struct file *file = aux_p->file;
+    off_t offset = aux_p->offset;
+    size_t page_read_bytes = aux_p->page_read_bytes;
+    size_t page_zero_bytes = PGSIZE - page_read_bytes;
+
+    file_seek(file, offset); // 파일을 offset부터 읽기
+    if (file_read(file, page->frame->kva, page_read_bytes) != (off_t)page_read_bytes) { // 물리 메모리에서 정상적으로 읽어오는지 확인.
+        palloc_free_page(page->frame->kva); // 제대로 못 읽었다면 free 시키고 false return
+        return false;
+    }
+
+    memset(page->frame->kva + page_read_bytes, 0, page_zero_bytes);  //남은 페이지 데이터들은 0으로 초기화
+	// page->frame->kva 로, 해당 VA에 해당하는 physical address에 파일에 대한 정보를 mapping 시킨다.
+    return true;
 }
 
 /* Loads a segment starting at offset OFS in FILE at address
