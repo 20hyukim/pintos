@@ -17,13 +17,16 @@ static const struct page_operations anon_ops = {
 	.type = VM_ANON,
 };
 
-/* Initialize the data for anonymous pages */
-void
-vm_anon_init (void) {
-	/* TODO: Set up the swap_disk. */
-	swap_disk = NULL;
-}
+struct bitmap *swap_table;
+size_t slot_max;
 
+/* Initialize the data for anonymous pages */
+void vm_anon_init(void) {
+    /* TODO: Set up the swap_disk. */
+    swap_disk = disk_get(1, 1);
+    slot_max = disk_size(swap_disk) / SLOT_SIZE;
+    swap_table = bitmap_create(slot_max);
+}
 /* Initialize the file mapping */
 bool
 anon_initializer (struct page *page, enum vm_type type, void *kva) { // kva; kernel virtual address
