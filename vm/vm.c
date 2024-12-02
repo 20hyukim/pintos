@@ -7,6 +7,7 @@
 #include "vm/inspect.h"
 #include "userprog/process.h"
 #include "vm/inspect.h"
+#include "threads/mmu.h"
 
 static struct list frame_table;
 
@@ -253,11 +254,21 @@ vm_dealloc_page (struct page *page) {
 }
 
 /* Claim the page that allocate on VA. */
+/* 페이지를 할당 - 물리적 프레임 할당 
+ * vm_get_frame을 통해 frame을 가져오는 작업은 완료되어 있음
+ * 이제 MMU (Memory Management Unit) 을 설정해 주어야 함.
+ * 가상 주소를 물리 주소에 매핑하는 작업을 page table에 추가하고, 성공 여부를 bool을 통해 알려줘야 함.
+ *  */
 bool vm_claim_page(void *va UNUSED) {
     /* TODO: Fill this function */
-    struct page *page = spt_find_page(&thread_current()->spt, va);
+	/* Pseudo cod
+	 * vm_get_frame을 통해 프레임을 가져온 후, 
+	 * va에서 외부 구조체로 page에 접근한 후; 프레임과 연결..?
+	 * 연결을 어떤 변수에다가 해야하지? */
 
-    if (page == NULL)
+    struct page *page = spt_find_page(&thread_current()->spt, va); // va로 spt에서 va에 해당하는 페이지를 찾고,
+
+    if (page == NULL) // spt에 va에 해당하는 페이지가 할당되어 있지 않다면 false 반환
         return false;
 
     return vm_do_claim_page(page);
@@ -265,17 +276,21 @@ bool vm_claim_page(void *va UNUSED) {
 
 /* Claim the PAGE and set up the mmu. */
 static bool vm_do_claim_page(struct page *page) {
-    struct frame *frame = vm_get_frame();
+    struct frame *frame = vm_get_frame(); // vm_get_frame으로 새로 값을 할당할 frame을 PM에서 찾기.
 
     /* Set links */
-    frame->page = page;
-    page->frame = frame;
+    frame->page = page; // 해당 프레임의 페이지를 현재 페이지로 mapping하고
+    page->frame = frame; // 현재 페이지의 프레임을 새로 할당한 프레임과 mapping 시켜준다.
 
     /* TODO: Insert page table entry to map page's VA to frame's PA. */
+	// page table entry - VA를 PA와 매핑이 성공되었다면, true가 반환되고, 실패했다면 false가 반환됨.;;
     if (!pml4_set_page(thread_current()->pml4, page->va, frame->kva, page->writable))
         return false;
 
-    return swap_in(page, frame->kva);  // uninit_initialize
+    return swap_in(page, frame->kva);  
+	/* uninit_initialize - swap_in 핸들러가 실행되며 uninit_initialize가 실행된다.
+	 * uninit_initialize에서 vm_alloc_page_with_initializer에서 설정한 초기화 함수가 실행됨.
+	 */ 
 }
 
 /* Initialize new supplemental page table */

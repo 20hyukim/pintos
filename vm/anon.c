@@ -2,6 +2,7 @@
 
 #include "vm/vm.h"
 #include "devices/disk.h"
+#include "vm/anon.h"
 
 /* DO NOT MODIFY BELOW LINE */
 static struct disk *swap_disk;
@@ -21,6 +22,7 @@ struct bitmap *swap_table;
 size_t slot_max;
 
 /* Initialize the data for anonymous pages */
+/* HDD과 연관되지 않는 anon type에 대해, iniit을 */
 void vm_anon_init(void) {
     /* TODO: Set up the swap_disk. */
     swap_disk = disk_get(1, 1);

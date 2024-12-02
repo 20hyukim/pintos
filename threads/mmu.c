@@ -61,30 +61,45 @@ static uint64_t *pdpe_walk(uint64_t *pdpe, const uint64_t va, int create) {
  * on CREATE.  If CREATE is true, then a new page table is
  * created and a pointer into it is returned.  Otherwise, a null
  * pointer is returned. */
+
+/* PML4에서 가상 주소(va)에 해당하는 page table entry (VM) 주소를 반환.
+ * 만약 PML4 entry에 va에 대한 페이지 테이블이 존재하지 않을 경우, 
+ * create에 따라 동작이 달라짐.
+ * (create가 true) 새로운 페이지 테이블이 생성되고 해당 테이블의 포인터를 반환.
+ * (create가 false) null pointer 반환.*/
+
+/* 함수의 목적: page table entry 주소를 찾고 반환해주는 역할.*/
 uint64_t *pml4e_walk(uint64_t *pml4e, const uint64_t va, int create) {
+    /* va는 다음과 같은 구조를 지님
+     * va = [PML4 Index] [PDPT Index] [PD Index] [Offset] 
+     * 여기서 단계 별로 추적하여 특정 entry를 가리킴. 
+     * 해당 entry를 이용해서, 
+     * 1. 가상 주소를 물리 주소로 매핑
+     * 2. 페이지 속성(읽기/쓰기 권한, 유효 여부 등)을 설정/검사할 수 있음.*/
     uint64_t *pte = NULL;
-    int idx = PML4(va);
+    int idx = PML4(va); // va를 이용해서 PML4에 접근할 인덱스를 계산
     int allocated = 0;
     if (pml4e) {
-        uint64_t *pdpe = (uint64_t *)pml4e[idx];
-        if (!((uint64_t)pdpe & PTE_P)) {
-            if (create) {
-                uint64_t *new_page = palloc_get_page(PAL_ZERO);
+        uint64_t *pdpe = (uint64_t *)pml4e[idx]; //계산한 va에 해당하는 index를 가지고, PDPT entry를 찾아낸다.
+        if (!((uint64_t)pdpe & PTE_P)) {  // PTE_P는 해당 엔트리가 유효한 지 확인할 수 있음. 
+            if (create) { 
+                uint64_t *new_page = palloc_get_page(PAL_ZERO); // entry가 유효하지 않음으로 새로운 PDPT 를 생성.
                 if (new_page) {
-                    pml4e[idx] = vtop(new_page) | PTE_U | PTE_W | PTE_P;
+                    pml4e[idx] = vtop(new_page) | PTE_U | PTE_W | PTE_P; // 플래그 설정해주고,
                     allocated = 1;
                 } else
                     return NULL;
             } else
                 return NULL;
         }
-        pte = pdpe_walk(ptov(PTE_ADDR(pml4e[idx])), va, create);
+        pte = pdpe_walk(ptov(PTE_ADDR(pml4e[idx])), va, create); // 확인된 or. create에 따라 새로 생성된, 
+                                                                 //pdpt를 가준으로 pd index를 찾음.
     }
-    if (pte == NULL && allocated) {
-        palloc_free_page((void *)ptov(PTE_ADDR(pml4e[idx])));
-        pml4e[idx] = 0;
+    if (pte == NULL && allocated) { // 새로운 PDPT를 할당한 경우, 
+        palloc_free_page((void *)ptov(PTE_ADDR(pml4e[idx]))); // 할당했던 페이지를 반환하여 메모리 정리.
+        pml4e[idx] = 0; // PML4 엔트리 초기화
     }
-    return pte;
+    return pte; //최종적으로 page table entry 반환.
 }
 
 /* Creates a new page map level 4 (pml4) has mappings for kernel
@@ -209,17 +224,28 @@ void *pml4_get_page(uint64_t *pml4, const void *uaddr) {
  * otherwise it is read-only.
  * Returns true if successful, false if memory allocation
  * failed. */
-bool pml4_set_page(uint64_t *pml4, void *upage, void *kpage, bool rw) {
-    ASSERT(pg_ofs(upage) == 0);
-    ASSERT(pg_ofs(kpage) == 0);
-    ASSERT(is_user_vaddr(upage));
-    ASSERT(pml4 != base_pml4);
+/* 사용자 Virtual Page인 UPAGE를 페이지 맵 레벨4 (PML4)에 추가하여 
+ * 커널 Virtual address (KPAGE)로 식별되는 물리적 프레임과 매핑을 설정
+ * ---> KPAGE는 PM와 1:1 매핑이 되어 있음. 따라서, 커널은 물리 메모리를 '직접' 참조할 수 있음.
+ * -----> 예를 들어 물리 주소 0x1000에 있는 페이지는 커널 가상 주소에서도 0x1000으로 접근할 수 있음.
+ * UPAGE는 이미 매핑되어 있으면 안됨.
+ * KPAGE는 palloc_get_page()를 사용하여 사용자 pool에서 얻은 페이지 이어야 함.
+ * WRITABLE이 true이면 새 페이지는 읽기/쓰기 가능 상태가 되고,
+ * 그렇지 않은 경우 읽기 전용 상태가 됨.
+ * 메모리 할당에 성공하면 true를 반환. 실패하면 false 반환.*/
 
-    uint64_t *pte = pml4e_walk(pml4, (uint64_t)upage, 1);
+/* 목적: VA와 PA을 PML4 구조를 통해 매핑 해주는 함수. */
+bool pml4_set_page(uint64_t *pml4, void *upage, void *kpage, bool rw) { // page -> va의 *upage니까, 페이지를 의미
+    ASSERT(pg_ofs(upage) == 0); // 페이지 시작 주소 offset인지 확인
+    ASSERT(pg_ofs(kpage) == 0); // ''
+    ASSERT(is_user_vaddr(upage));// upage가 user address인지 확인
+    ASSERT(pml4 != base_pml4); // 주어진 pml4가 현재 실행 중인 스레드의 base_pml4와 같지 않은지 확인?
+
+    uint64_t *pte = pml4e_walk(pml4, (uint64_t)upage, 1); // PML4에서 VA에 해당하는 page table entry를 찾음./pte = page table entry
 
     if (pte)
-        *pte = vtop(kpage) | PTE_P | (rw ? PTE_W : 0) | PTE_U;
-    return pte != NULL;
+        *pte = vtop(kpage) | PTE_P | (rw ? PTE_W : 0) | PTE_U; //vtop: 커널 가상 주소를 물리 주소로 변환.
+    return pte != NULL; // boolean 반환.
 }
 
 /* Marks user virtual page UPAGE "not present" in page
