@@ -174,6 +174,10 @@ vm_do_claim_page (struct page *page) {
 /* Initialize new supplemental page table */
 void
 supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
+	/* Pseudo
+	 * 아마도,,, virtual page entry 개수 만큼의 리스트 할당. 이를 통해 spt 초기화
+	 */
+	hash_init(&spt->spt_hash, hash_func, less_func, NULL);
 }
 
 /* Copy supplemental page table from src to dst */
