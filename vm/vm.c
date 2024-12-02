@@ -306,6 +306,61 @@ supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
 bool
 supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 		struct supplemental_page_table *src UNUSED) {
+	/* pseudo
+	 * spt를 순회하면서, UNINIT상태인지 확인
+	 * UNINIT상태라면, vm_do_claim_page를 eager로 함.
+	 */
+
+	struct hash_iterator iter;
+	struct page *dst_page;
+	struct aux *aux;
+
+	hash_first(&iter, &src->spt_hash);
+
+	while(hash_next(&iter)) { //spt 순환
+		struct page *src_page = hash_entry(hash_cur(&iter), struct page, hash_elem);
+		enum vm_type type = src_page->operations->type;
+		void *upage = src_page->va;
+		bool writable = src_page->writable;
+
+		switch (type) {
+			case VM_UNINIT: //vm_alloc_page_with_initializer로 새로운 spt에 페이지 할당.
+				if (!vm_alloc_page_with_initializer(page_get_type(src_page), upage, writable, src_page->uninit.init, src_page->uninit.aux))
+					goto err;
+				break;
+			case VM_FILE:
+				if(!vm_alloc_page_with_initializer(type, upage, writable, NULL, &src_page->file))
+					goto err;
+				dst_page = spt_find_page(dst, upage);
+				if(!file_backed_initializer(dst_page, type, NULL))
+					goto err;
+				
+				dst_page->frame = src_page->frame;
+				if(!pml4_set_page(thread_current()->pml4, dst_page->va, src_page->frame->kva, src_page->writable))
+					goto err;
+				
+				break;
+			
+			case VM_ANON:
+				if(!vm_alloc_page(type, upage, writable))
+					goto err;
+			
+				if (!vm_copy_claim_page(dst, upage, src_page->frame->kva, writable))
+					goto err;
+				
+				break;
+			
+			default:
+				goto err;
+		}
+
+	}
+	return true;
+
+err:
+	return false;
+
+
 }
 
 /* Free the resource hold by the supplemental page table */
