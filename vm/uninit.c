@@ -63,9 +63,14 @@ uninit_initialize (struct page *page, void *kva) {
  * to other page objects, it is possible to have uninit pages when the process
  * exit, which are never referenced during the execution.
  * PAGE will be freed by the caller. */
+/* UNINIT page가 보유한 리소스를 해제함.
+ * 프로세스가 종료될 때 실행 중에 한 번도 참조되지 않은 UNINIT 페이지가 존재할 수 있음.*/
 static void
 uninit_destroy (struct page *page) {
 	struct uninit_page *uninit UNUSED = &page->uninit;
 	/* TODO: Fill this function.
 	 * TODO: If you don't have anything to do, just return. */
+	/* pseudo
+	 * page의 상태를 확인하고 UNINIT이라면, spt에서 해제시키면 되는 거 아닌가? -> 근데 그건 이미 spt_kill에서,,,하니까 그냥 return 만 하면 됨.*/
+	return;
 }

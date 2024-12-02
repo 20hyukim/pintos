@@ -62,4 +62,14 @@ anon_swap_out (struct page *page) {
 static void
 anon_destroy (struct page *page) {
 	struct anon_page *anon_page = &page->anon;
+	/* pseudo
+	 * anon이 사용 중인 리소스 해제, page는 caller가 해제할 것이므로 신경 안써도 된다.
+	 * anon이 사용 중인 frame, page를 해제*/
+
+	if (page->frame) {
+		list_remove(&page->frame->frame_elem); // 리스트에서 해당 frame 제거
+		page->frame->page = NULL; // frame이 page를 가리키는 포인터 제거. NULL
+		free(page->frame); // 이후, frame을 free
+		page->frame = NULL; // page가 frame을 가리키는 포인터 제거. NULL
+	}
 }
