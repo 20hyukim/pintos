@@ -211,6 +211,15 @@ vm_get_frame (void) {
 /* Growing the stack. */
 static void
 vm_stack_growth (void *addr UNUSED) {
+	/* rsp 기준을 늘리기 */
+	bool success = false;
+	if (vm_alloc_page(VM_ANON | VM_MARKER_0, addr, true)) { // 현재 stack_bottom에서 1 PAGE만큼 아래의 주소에 대해서 vm_alloc_page를 시도.
+		success = vm_claim_page(addr);
+
+		if (success) {
+			thread_current()->stack_bottom -= PGSIZE;
+		}
+	}
 }
 
 /* Handle the fault on write_protected page */
@@ -236,8 +245,12 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED, bool us
         /** Project 3: Stack Growth - stack growth로 처리할 수 있는 경우 */
         /* stack pointer 아래 8바이트는 페이지 폴트 발생 & addr 위치를 USER_STACK에서 1MB로 제한 */
         void *stack_pointer = user ? f->rsp : thread_current()->stack_pointer;
-        if (stack_pointer - 8 <= addr && addr >= STACK_LIMIT && addr <= USER_STACK) {
-            vm_stack_growth(thread_current()->stack_bottom - PGSIZE);
+        if (stack_pointer - 8 <= addr && addr >= STACK_LIMIT && addr <= USER_STACK) { 
+			/* stack_pointer - 8 <= addr ; 스택 overflow가 맞는지 확인 sp' 8 byte 내에 있는 요청인지 확인
+			 * addr >= STACK_LIMIT ; 스택이 시스템의 허용 범위를 초과하지 않는지 확인. 즉, 1MB를 초과하지 않는지 확인
+			 * addr <= USER_STACK ; 스택은 USER_STACK에서 아래로 성장한다. 하지만, USER_STACK보다 위의 addr에 접근하는 건 잘못된 접근이므로 이를 확인하여 준다.
+			 */
+            vm_stack_growth(thread_current()->stack_bottom - PGSIZE); // vm의 stack의 제한을 늘림. 1 PAGE 만큼.
             return true;
         }
         return false;
