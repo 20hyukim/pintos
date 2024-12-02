@@ -398,3 +398,10 @@ uint64_t hash_func(const struct hash_elem *e, void *aux) {
     const struct page *p = hash_entry(e, struct page, hash_elem);
     return hash_bytes(&p->va, sizeof(p->va));
 }
+
+bool less_func(const struct hash_elem *a, const struct hash_elem *b, void *aux) {
+    const struct page *pa = hash_entry(a, struct page, hash_elem);
+    const struct page *pb = hash_entry(b, struct page, hash_elem);
+
+    return pa->va < pb->va;
+}
