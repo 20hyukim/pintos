@@ -20,6 +20,7 @@
 #include "threads/vaddr.h"
 #include "userprog/gdt.h"
 #include "userprog/tss.h"
+#include "userprog/syscall.h"
 
 #ifdef VM
 #include "vm/vm.h"
@@ -297,7 +298,7 @@ int process_wait(tid_t child_tid UNUSED) {
 }
 
 /** #Project 2: System Call - Exit the process. This function is called by thread_exit (). */
-void process_exit(void) {
+void process_exit(void) {/** fixed */
     thread_t *curr = thread_current();
     /* TODO: Your code goes here.
      * TODO: Implement process termination message (see
@@ -306,10 +307,9 @@ void process_exit(void) {
 
     for (int fd = 0; fd < curr->fd_idx; fd++)  // FDT 비우기
         close(fd);
+    palloc_free_multiple(curr->fdt, FDT_PAGES);
 
     file_close(curr->runn_file);  // 현재 프로세스가 실행중인 파일 종료
-
-    palloc_free_multiple(curr->fdt, FDT_PAGES);
 
     process_cleanup();
 
@@ -429,6 +429,9 @@ static bool load(const char *file_name, struct intr_frame *if_) {
         goto done;
     process_activate(thread_current());
 
+    /* Project 3 : Memory Management - Load Race 방지*/
+    lock_acquire(&filesys_lock); //***** fixed */
+
     /* Open executable file. */
     file = filesys_open(file_name);
     if (file == NULL) {
@@ -509,6 +512,8 @@ static bool load(const char *file_name, struct intr_frame *if_) {
 done:
     /* We arrive here whether the load is successful or not. */
     // file_close(file);
+
+    lock_release(&filesys_lock);
 
     return success;
 }
