@@ -19,6 +19,18 @@
         "vm.h": "c",
         "stdint.h": "c",
         "flags.h": "c",
-        "syscall.h": "c"
+        "syscall.h": "c",
+        "__config": "c",
+        "__hash_table": "c",
+        "__locale": "c",
+        "__split_buffer": "c",
+        "array": "c",
+        "memory_resource": "c",
+        "functional": "c",
+        "locale": "c",
+        "memory": "c",
+        "unordered_map": "c",
+        "variant": "c",
+        "vector": "c"
     }
 }
