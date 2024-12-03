@@ -3,6 +3,7 @@
 #include "vm/vm.h"
 #include "devices/disk.h"
 #include "vm/anon.h"
+#include "lib/kernel/bitmap.h"
 
 /* DO NOT MODIFY BELOW LINE */
 static struct disk *swap_disk;
@@ -42,7 +43,8 @@ anon_initializer (struct page *page, enum vm_type type, void *kva) { // kva; ker
 	page->operations = &anon_ops; // uninit과 관련된 operations에서 anon_ops operation을 설정해 줌.
 
 	struct anon_page *anon_page = &page->anon;// page union에서 UNINIT이 아니라, anon을 가리키도록 설정.
-	
+	anon_page->slot = BITMAP_ERROR; // 아직 해당 페이지가 Swap 영역에 저장되지 않았음을 나타냄. 유효한 swap 슬롯이 없음.
+
 	return true;
 }
 
