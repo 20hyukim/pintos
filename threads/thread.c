@@ -749,7 +749,8 @@ void donate_priority() {
     int priority = t->priority;
 
     for (int depth = 0; depth < 8; depth++) {
-        if (t->wait_lock == NULL)
+        /* child가 먼저 삭제되면 holder가 NULL이 되는 경우.*/
+        if (t->wait_lock == NULL || t->wait_lock->holder==NULL) 
             break;
 
         t = t->wait_lock->holder;
