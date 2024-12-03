@@ -1,6 +1,7 @@
 /* file.c: Implementation of memory backed file object (mmaped object). */
 
 #include "vm/vm.h"
+#include "threads/vaddr.h"
 #include "userprog/syscall.h"
 #include "userprog/process.h"
 

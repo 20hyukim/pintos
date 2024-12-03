@@ -360,7 +360,7 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 				if(!vm_alloc_page(type, upage, writable))
 					goto err;
 		
-				vm_claim_page(upage);
+				vm_claim_page(upage); // spt copy... ** added 
             	struct page *dst_page = spt_find_page(dst,upage);
             	memcpy(dst_page->frame->kva,src_page->frame->kva,PGSIZE);
             	break;
