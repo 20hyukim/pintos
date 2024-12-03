@@ -1,6 +1,8 @@
 /* file.c: Implementation of memory backed file object (mmaped object). */
 
 #include "vm/vm.h"
+#include "userprog/syscall.h"
+#include "userprog/process.h"
 
 static bool file_backed_swap_in (struct page *page, void *kva);
 static bool file_backed_swap_out (struct page *page);
@@ -47,12 +49,50 @@ file_backed_destroy (struct page *page) {
 }
 
 /* Do the mmap */
-void *
-do_mmap (void *addr, size_t length, int writable,
-		struct file *file, off_t offset) {
+void *do_mmap(void *addr, size_t length, int writable, struct file *file, off_t offset) {
+    lock_acquire(&filesys_lock);
+    struct file *mfile = file_reopen(file);
+    void *ori_addr = addr;
+    size_t read_bytes = (length > file_length(mfile)) ? file_length(mfile) : length;
+    size_t zero_bytes = PGSIZE - read_bytes % PGSIZE;
+
+    ASSERT((read_bytes + zero_bytes) % PGSIZE == 0);
+    ASSERT(pg_ofs(addr) == 0);
+    ASSERT(offset % PGSIZE == 0);
+
+    struct aux *aux;
+    while (read_bytes > 0 || zero_bytes > 0) {
+        size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
+        size_t page_zero_bytes = PGSIZE - page_read_bytes;
+
+        aux = (struct aux *)malloc(sizeof(struct aux));
+        if (!aux)
+            goto err;
+
+        aux->file = mfile;
+        aux->offset = offset;
+        aux->page_read_bytes = page_read_bytes;
+
+        if (!vm_alloc_page_with_initializer(VM_FILE, addr, writable, lazy_load_segment, aux)) {
+            goto err;
+        }
+
+        read_bytes -= page_read_bytes;
+        zero_bytes -= page_zero_bytes;
+        addr += PGSIZE;
+        offset += page_read_bytes;
+    }
+    lock_release(&filesys_lock);
+
+    return ori_addr;
+
+err:
+    free(aux);
+    lock_release(&filesys_lock);
+    return NULL;
 }
 
 /* Do the munmap */
 void
-do_munmap (void *addr) {
+	do_munmap (void *addr) {
 }

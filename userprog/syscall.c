@@ -20,6 +20,10 @@
 #include "userprog/process.h"
 /** -----------------------  */
 
+/** #Project 4: File System */
+#include "filesys/directory.h"
+#include "filesys/inode.h"
+
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
 
@@ -55,13 +59,14 @@ void syscall_init(void) {
 /* The main system call interface */
 /** #Project 2: System Call - 시스템 콜 핸들러 */
 void syscall_handler(struct intr_frame *f UNUSED) {
+#ifdef VM
+    /** Project 3: Memory Mapped Files - rsp 백업 */
+    thread_current()->stack_pointer = f->rsp;
+#endif
     // TODO: Your implementation goes here.
     int sys_number = f->R.rax;
 
-    // Argument 순서
-    // %rdi %rsi %rdx %r10 %r8 %r9
-
-    switch (sys_number) {
+    switch (sys_number) {  // Argument 순서 - %rdi %rsi %rdx %r10 %r8 %r9
         case SYS_HALT:
             halt();
             break;
@@ -107,20 +112,76 @@ void syscall_handler(struct intr_frame *f UNUSED) {
         case SYS_DUP2:
             f->R.rax = dup2(f->R.rdi, f->R.rsi);
             break;
+#ifdef VM
+        case SYS_MMAP:
+            f->R.rax = mmap(f->R.rdi, f->R.rsi, f->R.rdx, f->R.r10, f->R.r8);
+            break;
+        case SYS_MUNMAP:
+            munmap(f->R.rdi);
+            break;
+#endif
+#ifdef EFILESYS
+        case SYS_ISDIR:
+            f->R.rax = isdir(f->R.rdi);
+            break;
+        case SYS_CHDIR:
+            f->R.rax = chdir(f->R.rdi);
+            break;
+        case SYS_MKDIR:
+            f->R.rax = mkdir(f->R.rdi);
+            break;
+        case SYS_READDIR:
+            f->R.rax = readdir(f->R.rdi, f->R.rsi);
+            break;
+        case SYS_INUMBER:
+            f->R.rax = inumber(f->R.rdi);
+            break;
+        case SYS_SYMLINK:
+            f->R.rax = symlink(f->R.rdi, f->R.rsi);
+            break;
+#endif
         default:
             exit(-1);
     }
 }
 
+#ifndef VM
+/** #Project 2: System Call */
 void check_address(void *addr) {
-    if (is_kernel_vaddr(addr) || addr == NULL || pml4_get_page(thread_current()->pml4, addr) == NULL)
+    thread_t *curr = thread_current();
+
+    if (is_kernel_vaddr(addr) || addr == NULL || pml4_get_page(curr->pml4, addr) == NULL)
         exit(-1);
 }
+#else
+/** #Project 3: Anonymous Page */
+struct page *check_address(void *addr) {
+    thread_t *curr = thread_current();
 
+    if (is_kernel_vaddr(addr) || addr == NULL)
+        exit(-1);
+
+    return spt_find_page(&curr->spt, addr);
+}
+
+/** Project 3: Memory Mapped Files - 버퍼 유효성 검사 */
+void check_valid_buffer(void *buffer, size_t size, bool writable) {
+    for (size_t i = 0; i < size; i++) {
+        /* buffer가 spt에 존재하는지 검사 */
+        struct page *page = check_address(buffer + i);
+
+        if (!page || (writable && !(page->writable)))
+            exit(-1);
+    }
+}
+#endif
+
+/** #Project 2: System Call - Halt */
 void halt(void) {
     power_off();
 }
 
+/** #Project 2: System Call - Exit */
 void exit(int status) {
     thread_t *curr = thread_current();
     curr->exit_status = status;
@@ -131,12 +192,14 @@ void exit(int status) {
     thread_exit();
 }
 
+/** #Project 2: System Call - Fork */
 pid_t fork(const char *thread_name) {
     check_address(thread_name);
 
     return process_fork(thread_name, NULL);
 }
 
+/** #Project 2: System Call - Execute */
 int exec(const char *cmd_line) {
     check_address(cmd_line);
 
@@ -148,43 +211,59 @@ int exec(const char *cmd_line) {
 
     memcpy(cmd_copy, cmd_line, size);
 
-    if (process_exec(cmd_copy) == -1)
-        return -1;
-
-    return 0;  // process_exec 성공시 리턴 값 없음 (do_iret)
+    return process_exec(cmd_copy);  // process_exec 성공시 리턴 값 없음 (do_iret)
 }
 
+/** #Project 2: System Call - Wait */
 int wait(pid_t tid) {
     return process_wait(tid);
 }
 
+/** #Project 2: System Call - Create File */
 bool create(const char *file, unsigned initial_size) {
     check_address(file);
 
-    return filesys_create(file, initial_size);
+    lock_acquire(&filesys_lock);
+    bool success = filesys_create(file, initial_size);
+    lock_release(&filesys_lock);
+
+    return success;
 }
 
+/** #Project 2: System Call - Remove File */
 bool remove(const char *file) {
     check_address(file);
 
-    return filesys_remove(file);
+    lock_acquire(&filesys_lock);
+    bool success = filesys_remove(file);
+    lock_release(&filesys_lock);
+
+    return success;
 }
 
+/** #Project 2: System Call - Open File */
 int open(const char *file) {
     check_address(file);
+
+    lock_acquire(&filesys_lock);
     struct file *newfile = filesys_open(file);
 
     if (newfile == NULL)
-        return -1;
+        goto err;
 
     int fd = process_add_file(newfile);
 
     if (fd == -1)
         file_close(newfile);
 
+    lock_release(&filesys_lock);
     return fd;
+err:
+    lock_release(&filesys_lock);
+    return -1;
 }
 
+/** #Project 2: System Call - Get Filesize */
 int filesize(int fd) {
     struct file *file = process_get_file(fd);
 
@@ -194,14 +273,21 @@ int filesize(int fd) {
     return file_length(file);
 }
 
+/** #Project 2: System Call - Read File */
 int read(int fd, void *buffer, unsigned length) {
-    thread_t *curr = thread_current();
+#ifdef VM
+    check_valid_buffer(buffer, length, true);
+#endif
     check_address(buffer);
 
+    thread_t *curr = thread_current();
     struct file *file = process_get_file(fd);
 
-    if (file == 1) {  // 0(stdin) -> keyboard로 직접 입력
-        int i = 0;    // 쓰레기 값 return 방지
+    if (file == NULL || file == STDOUT || file == STDERR)  // 빈 파일, stdout, stderr를 읽으려고 할 경우
+        return -1;
+
+    if (file == STDIN) {  // stdin -> console로 직접 입력
+        int i = 0;        // 쓰레기 값 return 방지
         char c;
         unsigned char *buf = buffer;
 
@@ -215,53 +301,45 @@ int read(int fd, void *buffer, unsigned length) {
         return i;
     }
 
-    if (file == NULL || file == STDOUT || file == STDERR)  // 빈 파일, stdout, stderr를 읽으려고 할 경우
-        return -1;
-
     // 그 외의 경우
-    off_t bytes = -1;
-
     lock_acquire(&filesys_lock);
-    bytes = file_read(file, buffer, length);
+    off_t bytes = file_read(file, buffer, length);
     lock_release(&filesys_lock);
 
     return bytes;
 }
 
+/** #Project 2: System Call - Write File */
 int write(int fd, const void *buffer, unsigned length) {
+#ifdef VM
+    check_valid_buffer(buffer, length, false);
+#endif
     check_address(buffer);
 
+    lock_acquire(&filesys_lock);
     thread_t *curr = thread_current();
     off_t bytes = -1;
 
     struct file *file = process_get_file(fd);
 
     if (file == STDIN || file == NULL)  // stdin에 쓰려고 할 경우
-        return -1;
+        goto done;
 
-    if (file == STDOUT) {  // 1(stdout) -> console로 출력
-
+    if (file == STDOUT || file == STDERR) {  // 1(stdout) & 2(stderr) -> console로 출력
         putbuf(buffer, length);
-        return length;
+        bytes = length;
+        goto done;
     }
 
-    if (file == STDERR) {  // 2(stderr) -> console로 출력
-
-        putbuf(buffer, length);
-        return length;
-    }
-
-    lock_acquire(&filesys_lock);
     bytes = file_write(file, buffer, length);
-    lock_release(&filesys_lock);
 
+done:
+    lock_release(&filesys_lock);
     return bytes;
 }
 
+/** #Project 2: System Call - Change Read Position */
 void seek(int fd, unsigned position) {
-    if (fd < 0)
-        return;
-
     struct file *file = process_get_file(fd);
 
     if (file == NULL || (file >= STDIN && file <= STDERR))
@@ -270,6 +348,7 @@ void seek(int fd, unsigned position) {
     file_seek(file, position);
 }
 
+/** #Project 2: System Call - Get Read Position */
 int tell(int fd) {
     struct file *file = process_get_file(fd);
 
@@ -279,34 +358,27 @@ int tell(int fd) {
     return file_tell(file);
 }
 
+/** #Project 2: System Call - Close File */
 void close(int fd) {
     thread_t *curr = thread_current();
     struct file *file = process_get_file(fd);
 
     if (file == NULL)
-        return;
+        goto done;
 
     process_close_file(fd);
 
-    if (file == STDIN) {
+    if (file >= STDIN && file <= STDERR) {
         file = 0;
-        return;
-    }
-
-    if (file == STDOUT) {
-        file = 0;
-        return;
-    }
-
-    if (file == STDERR) {
-        file = 0;
-        return;
+        goto done;
     }
 
     if (file->dup_count == 0)
         file_close(file);
     else
         file->dup_count--;
+done:
+    return;
 }
 
 /** #Project 2: Extend File Descriptor (Extra) */
@@ -329,3 +401,90 @@ int dup2(int oldfd, int newfd) {
 
     return newfd;
 }
+
+#ifdef VM
+/** Project 3: Memory Mapped Files - Memory Mapping */
+void *mmap(void *addr, size_t length, int writable, int fd, off_t offset) { 
+    /* addr = 매핑을 시작할 가상 메모리 주소
+     * offset = 파일의 매핑 시작 위치
+     */
+    if (!addr || pg_round_down(addr) != addr || is_kernel_vaddr(addr) || is_kernel_vaddr(addr + length))
+        return NULL;
+        /* 각각의 조건에 대해서 확인해보자. 
+         * pg_round_down(addr) != addr ; 메모리 매핑 주소가 페이지 경계에 정렬되어 있지 않을 때
+         * is_kernel_vaddr(addr) ; 커널 전용 주소가 사용되는 지 확인. 매핑 가상 주소가 커널 전용 주소이면 안됨. 
+         * is_kernel_vaddr(addr + length) ; 범위 끝이 커널 주소인지 확인. 즉, 시작과 끝이 유저 전용 주소인지 확인.*/
+
+
+    if (offset != pg_round_down(offset) || offset % PGSIZE != 0) // offset 또한 페이지 경계에 정렬되어 있어야 함.
+        return NULL;
+
+
+    if (spt_find_page(&thread_current()->spt, addr)) // 이미 현재 addr가 page_table에 매핑이 되어 있다면 실패. 중복되지 않아야 함.
+        return NULL;
+
+    struct file *file = process_get_file(fd); // file descriptor로 file 가져오기. 
+
+    if ((file >= STDIN && file <= STDERR) || file == NULL) // 파일이 표준 입력/출력/오류 라면 안되므로 이를 확인, fd가 유효한지 확인.
+        return NULL;
+
+    if (file_length(file) == 0 || (long)length <= 0)  // 매핑할 파일의 크기 0인 경우 실패. 매핑할 길이가 0 이하인 경우도 실패.
+        return NULL;
+
+    return do_mmap(addr, length, writable, file, offset);
+}
+
+/** Project 3: Memory Mapped Files - Memory Unmapping */
+void munmap(void *addr) {
+    do_munmap(addr);
+}
+#endif
+
+#ifdef EFILESYS
+/** #Project 4: File System - Changes the current working directory of the process to dir, which may be relative or absolute. */
+bool chdir(const char *dir) {
+    return filesys_chdir(dir);
+}
+
+/** #Project 4: File System - Creates the directory named dir, which may be relative or absolute. */
+bool mkdir(const char *dir) {
+    return filesys_mkdir(dir);
+}
+
+/** #Project 4: File System - Reads a directory entry from file descriptor fd, which must represent a directory. */
+bool readdir(int fd, char name[READDIR_MAX_LEN + 1]) {
+    struct file *file = process_get_file(fd);
+
+    if (!file || inode_get_type(file->inode) != 1)
+        return false;
+
+    struct dir *dir = file;
+
+    return dir_readdir(dir, name);
+}
+
+/** #Project 4: File System - Returns true if fd represents a directory, false if it represents an ordinary file. */
+bool isdir(int fd) {
+    struct file *file = process_get_file(fd);
+
+    if (!file)
+        return false;
+
+    return inode_get_type(file->inode) == 1 ? true : false;
+}
+
+/** #Project 4: File System - Returns the inode number of the inode associated with fd, which may represent an ordinary file or a directory. */
+int inumber(int fd) {
+    struct file *file = process_get_file(fd);
+
+    return inode_get_inumber(file->inode);
+}
+
+/** #Project 4: Soft Links - Creates a symbolic link named linkpath which contains the string target. */
+int symlink(const char *target, const char *linkpath) {
+    check_address(target);
+    check_address(linkpath);
+
+    return filesys_symlink(target, linkpath) ? 0 : -1;
+}
+#endif

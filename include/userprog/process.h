@@ -20,6 +20,8 @@ struct file *process_get_file(int fd);
 int process_close_file(int fd);
 process_insert_file(int fd, struct file *f);
 
+bool lazy_load_segment(struct page *page, void *aux);
+
 struct aux {
 	struct file *file;
 	off_t offset;
