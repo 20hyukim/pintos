@@ -49,6 +49,7 @@ anon_initializer (struct page *page, enum vm_type type, void *kva) { // kva; ker
 }
 
 /* Swap in the page by read contents from the swap disk. */
+/* 디스크에서 페이지 복원. */
 static bool
 anon_swap_in (struct page *page, void *kva) {
 	/* pseudo code 
@@ -59,15 +60,15 @@ anon_swap_in (struct page *page, void *kva) {
 	size_t slot = anon_page->slot;
 	size_t sector = slot * SLOT_SIZE;
 
-	if (slot == BITMAP_ERROR || !bitmap_test(swap_table, slot))
+	if (slot == BITMAP_ERROR || !bitmap_test(swap_table, slot)) // 페이지가 swap 디스크에 저장된 정보가 없는 경우. 슬롯이 사용중이 아닌 경우 - false
 		return false;
 	
-	bitmap_set(swap_table, slot, false);
+	bitmap_set(swap_table, slot, false); // swap_in이 되었으므로 해당 slot은 사용 중이 아니므로, 이를 bitmap에 표시해 준다.
 
-	for (size_t i = 0; i < SLOT_SIZE; i ++)
-		disk_read(swap_disk, sector + i, kva + DISK_SECTOR_SIZE * i);
+	for (size_t i = 0; i < SLOT_SIZE; i ++) // SLOT_SIZE는 한 페이지를 저장하는 데 필요한 디스크 섹터 수를 의미한다.
+		disk_read(swap_disk, sector + i, kva + DISK_SECTOR_SIZE * i); // 모든 섹터를 읽어와 페이지 전체 데이터를 복원.
 
-	sector = BITMAP_ERROR;
+	sector = BITMAP_ERROR; // 해당 페이지가 swap out 상태가 아님을 표시.
 
 	return true;
 }

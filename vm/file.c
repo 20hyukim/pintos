@@ -48,12 +48,27 @@ file_backed_initializer (struct page *page, enum vm_type type, void *kva) {
 static bool
 file_backed_swap_in (struct page *page, void *kva) {
 	struct file_page *file_page UNUSED = &page->file;
+
+	return lazy_load_segment(page, file_page);
 }
 
 /* Swap out the page by writeback contents to the file. */
 static bool
 file_backed_swap_out (struct page *page) {
+	/* pseudo 
+	 * (dirty 유무 확인)
+	 * (true) file에 변경사항 저장. dirty하지 않다고 명시
+	 * (false) 바로 swap_out 진행. RAM에서 해당 frame 사용 중이지 않다고 명시.*/
 	struct file_page *file_page UNUSED = &page->file;
+	if (pml4_is_dirty(thread_current()->pml4, page->va)) { // dirty인지 확인. 더럽다면 file에 적어두고, dirty이지 않다고 명시
+		file_write_at(file_page->file, page->va, file_page->page_read_bytes, file_page->offset);
+		pml4_set_dirty(thread_current()->pml4, page->va, false);
+	}
+
+	//page와 frame 연관관계 끊기
+	page->frame->page = NULL;
+	page->frame = NULL;
+	pml4_clear_page(thread_current()->pml4, page->va);
 }
 
 /* Destory the file backed page. PAGE will be freed by the caller. */
