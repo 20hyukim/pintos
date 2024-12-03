@@ -51,13 +51,54 @@ anon_initializer (struct page *page, enum vm_type type, void *kva) { // kva; ker
 /* Swap in the page by read contents from the swap disk. */
 static bool
 anon_swap_in (struct page *page, void *kva) {
+	/* pseudo code 
+	 * anon_page -> slot에 저장되어 있는 슬롯 정보를 가져온다.
+	 * 해당 페이지 정보를 mmap을 통해 가져오고,
+	 * page - frame간의 링크를 형성한다. */
 	struct anon_page *anon_page = &page->anon;
+	size_t slot = anon_page->slot;
+	size_t sector = slot * SLOT_SIZE;
+
+	if (slot == BITMAP_ERROR || !bitmap_test(swap_table, slot))
+		return false;
+	
+	bitmap_set(swap_table, slot, false);
+
+	for (size_t i = 0; i < SLOT_SIZE; i ++)
+		disk_read(swap_disk, sector + i, kva + DISK_SECTOR_SIZE * i);
+
+	sector = BITMAP_ERROR;
+
+	return true;
 }
 
 /* Swap out the page by writing contents to the swap disk. */
 static bool
 anon_swap_out (struct page *page) {
+	/* pseudo code
+	 * swap 영역에서 slot 할당 받기
+	 * (slot을 할당 받았다면) 해당 slot에 메모리 넣고, 해당 RAM을 free
+	 * (swap disk 초과로 할당 받지 못했다면) 커널 패닉 */
 	struct anon_page *anon_page = &page->anon;
+
+	size_t free_idx = bitmap_scan_and_flip(swap_table, 0, 1, false); // 빈 슬롯을 탐색하고 해당 슬롯을 사용 중으로 표시. 
+
+	if (free_idx == BITMAP_ERROR) // swap slot이 없으면 False 반환.
+		return false;
+	
+	size_t sector = free_idx * SLOT_SIZE; // 디스크에 저장할 위치
+
+	for (size_t i = 0; i < SLOT_SIZE; i++)
+		disk_write(swap_disk, sector + i, page->va + DISK_SECTOR_SIZE *i); // swap 디스크에 페이지 데이터를 기록.
+	
+	anon_page->slot = free_idx; // 데이터가 저장된 swap slot에 대한 정보를 저장.
+
+	// page 와 frame간에 링크를 끊고, pml4에서 해당 페이지를 clear
+	page->frame->page = NULL;
+	page->frame = NULL;
+	pml4_clear_page(thread_current()->pml4, page->va);
+
+	return true;
 }
 
 /* Destroy the anonymous page. PAGE will be freed by the caller. */
