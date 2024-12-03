@@ -690,10 +690,6 @@ lazy_load_segment (struct page *page, void *aux) {
 
     memset(page->frame->kva + page_read_bytes, 0, page_zero_bytes);  //남은 페이지 데이터들은 0으로 초기화
 	// page->frame->kva 로, 해당 VA에 해당하는 physical address에 파일에 대한 정보를 mapping 시킨다.
-
-    pml4_set_dirty(thread_current()->pml4, page->va, false);
-
-    free(aux_p);
     
     return true;
 }
