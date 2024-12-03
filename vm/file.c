@@ -46,6 +46,20 @@ file_backed_swap_out (struct page *page) {
 static void
 file_backed_destroy (struct page *page) {
 	struct file_page *file_page UNUSED = &page->file;
+
+	if (pml4_is_dirty(thread_current()->pml4, page->va)) { //pml4페이지에서 해당 페이지가 dirty인지 확인.
+		file_write_at(file_page->file, page->va, file_page->page_read_bytes, file_page->offset);
+		pml4_set_dirty(thread_current()->pml4, page->va, false); // file에 수정 사항을 반영 했으므로, dirty = false;
+	}
+
+	if (page->frame) {// page와 frame사이에 link를 해제하고, frame 또한 해제한다. page는 caller가 해제할 것이다.
+		list_remove(&page->frame->frame_elem);
+		page->frame->page = NULL;
+		page->frame = NULL;
+		free(page->frame);
+	}
+
+	pml4_clear_page(thread_current()->pml4, page->va); // pml4에 있던 va도 clear한다.
 }
 
 /* Do the mmap / mmap이 매핑 가능 조건을 확인하는 함수였다면, do_mmap은 실제 매핑을 진행하는 함수.*/
