@@ -152,11 +152,17 @@ void
 	struct page *page;
 
 	lock_acquire(&filesys_lock);
-	while((page = spt_find_page(&curr->spt, addr))) {
-		if (page)
-			destroy(page); // destory(page)를 한다는 건, 해당 프로세스를 위해 PM에 할당된 메모리 지우기.
-
-		addr += PGSIZE;
-	}
+    while ((page = spt_find_page(&curr->spt, addr))) {
+        if (page) {
+            // Dirty Bit 확인 및 파일에 데이터 동기화
+            if (pml4_is_dirty(thread_current()->pml4, page->va)) {
+                struct file_page *file_page = &page->file;
+                file_write_at(file_page->file, page->va, file_page->page_read_bytes, file_page->offset);
+                pml4_set_dirty(thread_current()->pml4, page->va, false);
+            }
+            destroy(page);
+        }
+        addr += PGSIZE;
+    }
 	lock_release(&filesys_lock);
 }
