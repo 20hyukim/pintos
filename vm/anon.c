@@ -120,4 +120,5 @@ anon_destroy (struct page *page) {
 		free(page->frame); // 이후, frame을 free
 		page->frame = NULL; // page가 frame을 가리키는 포인터 제거. NULL
 	}
+
 }

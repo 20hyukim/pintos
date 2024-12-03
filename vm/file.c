@@ -69,6 +69,8 @@ file_backed_swap_out (struct page *page) {
 	page->frame->page = NULL;
 	page->frame = NULL;
 	pml4_clear_page(thread_current()->pml4, page->va);
+
+	return true; // 이걸 잊었었다...
 }
 
 /* Destory the file backed page. PAGE will be freed by the caller. */
