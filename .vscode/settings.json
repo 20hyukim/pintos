@@ -31,6 +31,7 @@
         "memory": "c",
         "unordered_map": "c",
         "variant": "c",
-        "vector": "c"
+        "vector": "c",
+        "main.h": "c"
     }
 }

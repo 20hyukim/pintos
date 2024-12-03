@@ -2,7 +2,7 @@
    if the data was actually modified in memory. */
 
 #include <string.h>
-#include <syscall.h>
+#include "lib/user/syscall.h"
 #include "tests/vm/sample.inc"
 #include "tests/lib.h"
 #include "tests/main.h"

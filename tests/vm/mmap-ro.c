@@ -3,7 +3,7 @@
    call to verify. */
 
 #include <string.h>
-#include <syscall.h>
+#include "lib/user/syscall.h"
 #include "tests/lib.h"
 #include "tests/main.h"
 
